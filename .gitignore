@@ -1,0 +1,36 @@
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDE & Editor
+.idea/
+*.iml
+.vscode/
+*.sublime-workspace
+
+# Java / Maven build artifacts
+**/target/
+**/*.class
+**/*.jar
+**/*.war
+
+# Node / Frontend build artifacts & dependencies
+**/node_modules/
+**/dist/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & Credentials
+**/.env
+**/.env.local
+**/.env.production
+
+# Test & Playwright Reports (generated dynamically by CI/CD)
+**/test-results/
+**/playwright-report/
+**/reports/html/
+**/reports/junit.xml
+**/reports/results.json
+**/reports/pipeline-score-summary.json

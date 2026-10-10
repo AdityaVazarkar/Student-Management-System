@@ -1,0 +1,32 @@
+{
+  "name": "smart-student-post-release-checks",
+  "version": "1.0.0",
+  "description": "Post-release verification, smoke checks, and health validation test suite for Jenkins CI/CD pipeline",
+  "main": "playwright.config.js",
+  "scripts": {
+    "test": "./node_modules/.bin/playwright test",
+    "test:health": "./node_modules/.bin/playwright test tests/health",
+    "test:api": "./node_modules/.bin/playwright test tests/api",
+    "test:ui": "./node_modules/.bin/playwright test tests/ui",
+    "test:journeys": "./node_modules/.bin/playwright test tests/journeys",
+    "test:smoke": "node scripts/wait-for-readiness.js && ./node_modules/.bin/playwright test tests/health tests/api",
+    "test:all": "node scripts/wait-for-readiness.js && ./node_modules/.bin/playwright test && node scripts/calculate-score.js",
+    "wait:ready": "node scripts/wait-for-readiness.js",
+    "cleanup": "node scripts/cleanup-test-data.js",
+    "calculate-score": "node scripts/calculate-score.js"
+  },
+  "keywords": [
+    "jenkins",
+    "ci-cd",
+    "pipeline",
+    "smoke-tests",
+    "playwright",
+    "post-release-checks"
+  ],
+  "author": "DevOps / QA Automation",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "dotenv": "^16.4.7"
+  }
+}
