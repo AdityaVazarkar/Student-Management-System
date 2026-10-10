@@ -8,11 +8,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.http.HttpStatus;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/students")
+@RequestMapping({"/api/students", "/api/v1/students"})
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class StudentController {
@@ -27,7 +28,26 @@ public class StudentController {
         return ResponseEntity.ok(studentService.getAllStudents());
     }
 
-    @GetMapping("/{id}")
+    @PostMapping
+    public ResponseEntity<?> createStudent(@RequestBody StudentUpdateRequest request) {
+        try {
+            User created = studentService.createStudent(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> getHealth() {
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "service", "Student API",
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+
+    @GetMapping("/{id:[0-9]+}")
     public ResponseEntity<?> getStudentById(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(studentService.getStudentById(id));

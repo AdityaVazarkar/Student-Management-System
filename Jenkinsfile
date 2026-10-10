@@ -51,7 +51,7 @@ pipeline {
                 echo "Executing pre-flight health probe for ${params.TARGET_ENV}..."
                 dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
                     sh 'npm install'
-                    sh "ENVIRONMENT=${env.ENVIRONMENT} node scripts/wait-for-readiness.js"
+                    sh "ENVIRONMENT=${env.ENVIRONMENT} node scripts/wait-for-deployment.js"
                 }
             }
         }
@@ -83,6 +83,9 @@ pipeline {
                 reportFiles: 'index.html',
                 reportName: "${params.TARGET_ENV} Post-Release Verification Report"
             ])
+
+            // Archive Markdown summary
+            archiveArtifacts artifacts: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/summary.md, SMART-STUDENT-POST-RELEASE-CHECKS/reports/pipeline-score-summary.json', allowEmptyArchive: true
 
             // Reconcile and clean test data
             dir('SMART-STUDENT-POST-RELEASE-CHECKS') {

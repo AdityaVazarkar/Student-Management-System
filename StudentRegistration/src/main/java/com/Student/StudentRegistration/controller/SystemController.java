@@ -41,4 +41,13 @@ public class SystemController {
         routeList.sort(Comparator.comparing(m -> m.get("path").toString()));
         return ResponseEntity.ok(routeList);
     }
+
+    @GetMapping({"/health", "/api/health", "/api/v1/students/health"})
+    public ResponseEntity<Map<String, Object>> getHealthStatus() {
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "service", "Student Portal & API",
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
 }

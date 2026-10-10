@@ -34,3 +34,4 @@ yarn-error.log*
 **/reports/junit.xml
 **/reports/results.json
 **/reports/pipeline-score-summary.json
+**/reports/summary.md

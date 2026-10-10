@@ -58,6 +58,26 @@ public class StudentService {
         return userRepository.save(student);
     }
 
+    public User createStudent(StudentUpdateRequest request) {
+        if (request.getEmail() == null || request.getName() == null) {
+            throw new IllegalArgumentException("Name and email are required");
+        }
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Email already exists: " + email);
+        }
+        User student = User.builder()
+                .name(request.getName().trim())
+                .email(email)
+                .password("student123")
+                .role(Role.STUDENT)
+                .rollNumber(request.getRollNumber() != null && !request.getRollNumber().trim().isEmpty() ? request.getRollNumber().trim() : "STU-" + System.currentTimeMillis() % 100000)
+                .phone(request.getPhone() != null ? request.getPhone().trim() : null)
+                .className(request.getClassName() != null && !request.getClassName().trim().isEmpty() ? request.getClassName().trim() : "Grade 10 - Section A")
+                .build();
+        return userRepository.save(student);
+    }
+
     public User assignClass(Long id, AssignClassRequest request) {
         User student = getStudentById(id);
         String targetClass = request.getClassName() != null ? request.getClassName().trim() : "Unassigned";
