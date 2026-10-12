@@ -152,15 +152,19 @@ pipeline {
                                 }
                             } catch (Exception e) {
                                 sh '''
-                                    if [ -n "$VERCEL_TOKEN" ]; then
-                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+                                    TOKEN_VAL="${VERCEL_TOKEN}"
+                                    if [ -z "$TOKEN_VAL" ] && [ -f "$HOME/.vercel_token" ]; then
+                                        TOKEN_VAL=$(cat "$HOME/.vercel_token")
+                                    fi
+
+                                    if [ -n "$TOKEN_VAL" ]; then
+                                        echo "Deploying production build to Vercel..."
+                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --token="$TOKEN_VAL")
                                         echo "=========================================================="
                                         echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
                                         echo "  Live URL: $LIVE_URL"
                                         echo "=========================================================="
                                     else
-
-
                                         echo "=========================================================="
                                         echo "  [Vercel Automated Deployment]"
                                         echo "=========================================================="
@@ -173,6 +177,7 @@ pipeline {
                                     fi
                                 '''
                             }
+
                         }
                     }
                 }
