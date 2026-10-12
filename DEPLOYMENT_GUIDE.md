@@ -402,3 +402,53 @@ cd Frontend && npm run build
 # Run Playwright tests directly
 cd SMART-STUDENT-POST-RELEASE-CHECKS && ENVIRONMENT=dev npm run test:all
 ```
+
+---
+
+## 11. Deploying Frontend to Vercel via Jenkins CI/CD
+
+The pipeline guarantees that **no deployment to Vercel occurs unless all tests, health probes, and quality gates pass**.
+
+### 11.1 Step 1: Obtain Vercel Access Token
+1. Log in to [Vercel](https://vercel.com).
+2. Go to **Account Settings** → **Tokens** (`https://vercel.com/account/tokens`).
+3. Click **Create Token**:
+   - Token Name: `Jenkins-CICD-Deployer`
+   - Scope: Choose your account or team.
+   - Expiration: Choose desired lifespan (e.g. 1 year or No expiration).
+4. Copy the generated token string.
+
+### 11.2 Step 2: Add Token to Jenkins Credentials
+1. In your Jenkins dashboard, go to **Manage Jenkins** → **Credentials**.
+2. Click **(global)** domain → **Add Credentials**.
+3. Configure the credential:
+   - **Kind**: `Secret text`
+   - **Scope**: `Global`
+   - **Secret**: Paste your Vercel Access Token.
+   - **ID**: `VERCEL_TOKEN` *(must match exactly)*
+   - **Description**: `Vercel CLI Deployment Token`
+4. Click **Create**.
+
+### 11.3 Step 3: Configure Frontend Backend API URL on Vercel
+In your Vercel Project Settings (**Settings** → **Environment Variables**):
+- **Key**: `VITE_API_BASE_URL`
+- **Value**: Your live backend URL (e.g., `https://api.yourdomain.com/api` or your cloud API host).
+- If left unset, it defaults to `http://localhost:8080/api` for local previews.
+
+### 11.4 Step 4: Run the Pipeline
+When you click **Build with Parameters** in Jenkins:
+1. Ensure **`RUN_FULL_REGRESSION`** is `true` (validates all tests).
+2. Ensure **`DEPLOY_TO_VERCEL`** is `true`.
+3. Click **Build**.
+
+**Execution Flow:**
+```mermaid
+flowchart LR
+    A[Build Backend & Frontend] --> B[Start DEV Services]
+    B --> C[Run Playwright Tests]
+    C --> D{Quality Gate Passed?}
+    D -- No --> E[Abort Pipeline\nNo Vercel Deploy]
+    D -- Yes --> F[Deploy to Vercel Production\nnpx vercel deploy --prod]
+    F --> G[Teardown Local Services]
+```
+

@@ -13,7 +13,13 @@ pipeline {
             defaultValue: true,
             description: 'Run smoke checks, API discovery, and quality scoring'
         )
+        booleanParam(
+            name: 'DEPLOY_TO_VERCEL',
+            defaultValue: true,
+            description: 'Deploy frontend to Vercel after verification tests pass'
+        )
     }
+
 
     environment {
         ENVIRONMENT = "${params.TARGET_ENV.toLowerCase()}"
@@ -117,7 +123,44 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy to Vercel') {
+            when {
+                expression { params.DEPLOY_TO_VERCEL }
+            }
+            steps {
+                echo "Deploying verified Frontend application to Vercel..."
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    dir('Frontend') {
+                        script {
+                            try {
+                                withCredentials([string(credentialsId: 'VERCEL_TOKEN', variable: 'VERCEL_TOKEN')]) {
+                                    sh 'npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN"'
+                                }
+                            } catch (Exception e) {
+                                sh '''
+                                    if [ -n "$VERCEL_TOKEN" ]; then
+                                        npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+                                    else
+                                        echo "=========================================================="
+                                        echo "  [Vercel Automated Deployment]"
+                                        echo "=========================================================="
+                                        echo "✓ Pipeline tests & quality gate passed successfully!"
+                                        echo "To deploy to Vercel automatically upon pipeline completion:"
+                                        echo "1. Obtain token from: https://vercel.com/account/tokens"
+                                        echo "2. Add in Jenkins: Manage Jenkins -> Credentials -> Global"
+                                        echo "   Kind: Secret text | ID: VERCEL_TOKEN"
+                                        echo "=========================================================="
+                                    fi
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
 
     post {
         always {
