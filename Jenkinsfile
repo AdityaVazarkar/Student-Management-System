@@ -143,7 +143,7 @@ pipeline {
                                 withCredentials([string(credentialsId: 'VERCEL_TOKEN', variable: 'VERCEL_TOKEN')]) {
                                     sh '''
                                         echo "Deploying production build to Vercel..."
-                                        LIVE_URL=$(npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --token="$VERCEL_TOKEN")
                                         echo "=========================================================="
                                         echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
                                         echo "  Live URL: $LIVE_URL"
@@ -153,12 +153,13 @@ pipeline {
                             } catch (Exception e) {
                                 sh '''
                                     if [ -n "$VERCEL_TOKEN" ]; then
-                                        LIVE_URL=$(npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --token="$VERCEL_TOKEN")
                                         echo "=========================================================="
                                         echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
                                         echo "  Live URL: $LIVE_URL"
                                         echo "=========================================================="
                                     else
+
 
                                         echo "=========================================================="
                                         echo "  [Vercel Automated Deployment]"
