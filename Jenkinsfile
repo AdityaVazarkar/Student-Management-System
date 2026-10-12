@@ -2,7 +2,13 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+        pollSCM('H/2 * * * *')
+    }
+
     parameters {
+
         choice(
             name: 'TARGET_ENV',
             choices: ['DEV', 'UAT'],
@@ -135,13 +141,25 @@ pipeline {
                         script {
                             try {
                                 withCredentials([string(credentialsId: 'VERCEL_TOKEN', variable: 'VERCEL_TOKEN')]) {
-                                    sh 'npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN"'
+                                    sh '''
+                                        echo "Deploying production build to Vercel..."
+                                        LIVE_URL=$(npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+                                        echo "=========================================================="
+                                        echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
+                                        echo "  Live URL: $LIVE_URL"
+                                        echo "=========================================================="
+                                    '''
                                 }
                             } catch (Exception e) {
                                 sh '''
                                     if [ -n "$VERCEL_TOKEN" ]; then
-                                        npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+                                        LIVE_URL=$(npx --yes vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+                                        echo "=========================================================="
+                                        echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
+                                        echo "  Live URL: $LIVE_URL"
+                                        echo "=========================================================="
                                     else
+
                                         echo "=========================================================="
                                         echo "  [Vercel Automated Deployment]"
                                         echo "=========================================================="

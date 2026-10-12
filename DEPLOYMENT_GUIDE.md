@@ -452,3 +452,44 @@ flowchart LR
     F --> G[Teardown Local Services]
 ```
 
+---
+
+## 12. Automated Trigger on GitHub Push (Zero-Touch CI/CD)
+
+The pipeline is now configured to trigger automatically whenever new code is pushed to the `main` branch on GitHub—**no manual clicking on the Jenkins dashboard required**.
+
+### How Automated Triggers Work:
+The pipeline includes both push notification and background SCM polling:
+```groovy
+triggers {
+    githubPush()
+    pollSCM('H/2 * * * *')
+}
+```
+
+1. **SCM Polling (`pollSCM('H/2 * * * *')`)**:
+   - **Zero configuration required**: Works out-of-the-box even on a local Mac or private network behind NAT/firewall.
+   - Jenkins polls GitHub every 2 minutes. When changes are detected, it starts the build immediately.
+2. **GitHub Webhook (`githubPush()`) (Instant / Real-time)**:
+   - For instantaneous builds upon `git push`:
+     1. In GitHub repository, go to **Settings** → **Webhooks** → **Add webhook**.
+     2. **Payload URL**: `http://<YOUR_JENKINS_SERVER_URL>/github-webhook/`
+     3. **Content type**: `application/json`
+     4. **Events**: `Just the push event`.
+     5. Click **Add webhook**.
+
+### End-to-End Zero-Touch Lifecycle:
+1. Developer pushes code to GitHub: `git push origin main`.
+2. Jenkins detects the new commit automatically (via webhook or SCM polling within 2 minutes).
+3. Jenkins runs:
+   - Java Backend build & unit tests (`mvnw clean package`)
+   - React Frontend build (`npm run build`)
+   - Service Readiness Probe (`wait-for-deployment.js`)
+   - Playwright E2E verification & quality gate calculation (`calculate-score.js`)
+4. **If any error occurs**:
+   - The build stops, Vercel deployment is **aborted**, and logs are preserved.
+5. **If all tests pass**:
+   - The frontend is automatically deployed to Vercel production (`--prod`).
+   - The live production URL is updated and displayed in the Jenkins console!
+
+
