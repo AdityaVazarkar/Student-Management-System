@@ -1,10 +1,11 @@
+
 pipeline {
     agent any
 
     parameters {
         choice(
-            name: 'TARGET_ENV', 
-            choices: ['DEV', 'UAT'], 
+            name: 'TARGET_ENV',
+            choices: ['DEV', 'UAT'],
             description: 'Select target deployment environment to verify'
         )
         booleanParam(
@@ -17,6 +18,7 @@ pipeline {
     environment {
         ENVIRONMENT = "${params.TARGET_ENV.toLowerCase()}"
         JAVA_HOME   = '/opt/homebrew/Cellar/openjdk@21/21.0.12/libexec/openjdk.jdk/Contents/Home'
+        PATH+NODE   = '/opt/homebrew/bin'
         CI          = 'true'
     }
 
@@ -24,44 +26,60 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Deploying and verifying target environment: ${params.TARGET_ENV}"
+                sh '''
+                    echo "Node: $(command -v node || true)"
+                    echo "npm: $(command -v npm || true)"
+                    node --version
+                    npm --version
+                    java -version
+                '''
             }
         }
 
         stage('Build & Test Backend') {
             steps {
-                echo "Compiling Spring Boot backend with PostgreSQL for ${params.TARGET_ENV}..."
+                echo "Building Spring Boot backend for ${params.TARGET_ENV}..."
                 dir('StudentRegistration') {
-                    sh './mvnw clean package -DskipTests'
+                    sh '''
+                        chmod +x mvnw
+                        ./mvnw clean package
+                    '''
                 }
             }
         }
 
         stage('Build Frontend') {
             steps {
-                echo "Compiling React.js frontend for ${params.TARGET_ENV}..."
+                echo "Building React frontend for ${params.TARGET_ENV}..."
                 dir('Frontend') {
-                    sh 'npm install'
+                    sh 'npm ci'
                     sh 'npm run build'
                 }
             }
         }
 
         stage('Service Readiness Probe') {
+            when {
+                expression { params.RUN_FULL_REGRESSION }
+            }
             steps {
-                echo "Executing pre-flight health probe for ${params.TARGET_ENV}..."
+                echo "Executing readiness probe for ${params.TARGET_ENV}..."
                 dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                    sh 'npm install'
+                    sh 'npm ci'
                     sh "ENVIRONMENT=${env.ENVIRONMENT} node scripts/wait-for-deployment.js"
                 }
             }
         }
 
         stage('Post-Release Verification & Auto-Discovery') {
+            when {
+                expression { params.RUN_FULL_REGRESSION }
+            }
             steps {
-                echo "Running smoke tests and zero-config dynamic API discovery on ${params.TARGET_ENV}..."
+                echo "Running smoke tests and API discovery for ${params.TARGET_ENV}..."
                 dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                    sh "ENVIRONMENT=${env.ENVIRONMENT} ./node_modules/.bin/playwright test || true"
-                    sh 'node scripts/calculate-score.js || true'
+                    sh "ENVIRONMENT=${env.ENVIRONMENT} ./node_modules/.bin/playwright test"
+                    sh 'node scripts/calculate-score.js'
                 }
             }
         }
@@ -70,33 +88,47 @@ pipeline {
     post {
         always {
             echo 'Publishing test results and quality metrics...'
-            
-            // JUnit report for Jenkins test result trend graphs
-            junit testResults: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/junit.xml', allowEmptyResults: true
-            
-            // Publish Playwright HTML Smoke Report
-            publishHTML([
-                allowMissing: true,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/html',
-                reportFiles: 'index.html',
-                reportName: "${params.TARGET_ENV} Post-Release Verification Report"
-            ])
 
-            // Archive Markdown summary
-            archiveArtifacts artifacts: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/summary.md, SMART-STUDENT-POST-RELEASE-CHECKS/reports/pipeline-score-summary.json', allowEmptyArchive: true
+            junit(
+                testResults: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/junit.xml',
+                allowEmptyResults: true
+            )
 
-            // Reconcile and clean test data
+            archiveArtifacts(
+                artifacts: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/**',
+                allowEmptyArchive: true
+            )
+
+            // Publish HTML only after installing the HTML Publisher plugin.
+            script {
+                def htmlPublisherAvailable =
+                    Jenkins.instance.pluginManager.getPlugin('htmlpublisher') != null
+
+                if (htmlPublisherAvailable) {
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/html',
+                        reportFiles: 'index.html',
+                        reportName: "${params.TARGET_ENV} Post-Release Verification Report"
+                    ])
+                } else {
+                    echo 'HTML Publisher plugin is not installed; skipping HTML report publishing.'
+                }
+            }
+
             dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                sh "ENVIRONMENT=${env.ENVIRONMENT} node scripts/cleanup-test-data.js || true"
+                sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
             }
         }
+
         success {
-            echo "✅ Quality Gate PASSED for ${params.TARGET_ENV}! Deployment verified."
+            echo "Quality Gate PASSED for ${params.TARGET_ENV}."
         }
+
         failure {
-            echo "❌ Quality Gate FAILED for ${params.TARGET_ENV}. Deployment requires attention."
+            echo "Quality Gate FAILED for ${params.TARGET_ENV}. Review Console Output."
         }
     }
 }
