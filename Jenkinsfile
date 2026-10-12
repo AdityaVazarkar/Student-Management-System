@@ -11,34 +11,35 @@ pipeline {
         booleanParam(
             name: 'RUN_FULL_REGRESSION',
             defaultValue: true,
-            description: 'Run complete smoke checks, dynamic API auto-discovery, and calculate quality gate score'
+            description: 'Run smoke checks, API discovery, and quality scoring'
         )
     }
 
     environment {
         ENVIRONMENT = "${params.TARGET_ENV.toLowerCase()}"
-        JAVA_HOME   = '/opt/homebrew/Cellar/openjdk@21/21.0.12/libexec/openjdk.jdk/Contents/Home'
-        PATH+NODE   = '/opt/homebrew/bin'
-        CI          = 'true'
+        JAVA_HOME = '/opt/homebrew/Cellar/openjdk@21/21.0.12/libexec/openjdk.jdk/Contents/Home'
+        CI = 'true'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Deploying and verifying target environment: ${params.TARGET_ENV}"
-                sh '''
-                    echo "Node: $(command -v node || true)"
-                    echo "npm: $(command -v npm || true)"
-                    node --version
-                    npm --version
-                    java -version
-                '''
+                echo "Target environment: ${params.TARGET_ENV}"
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    sh '''
+                        echo "Node: $(command -v node)"
+                        echo "npm: $(command -v npm)"
+                        node --version
+                        npm --version
+                        java -version
+                    '''
+                }
             }
         }
 
         stage('Build & Test Backend') {
             steps {
-                echo "Building Spring Boot backend for ${params.TARGET_ENV}..."
+                echo "Building Spring Boot backend..."
                 dir('StudentRegistration') {
                     sh '''
                         chmod +x mvnw
@@ -50,10 +51,12 @@ pipeline {
 
         stage('Build Frontend') {
             steps {
-                echo "Building React frontend for ${params.TARGET_ENV}..."
-                dir('Frontend') {
-                    sh 'npm ci'
-                    sh 'npm run build'
+                echo "Building React frontend..."
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    dir('Frontend') {
+                        sh 'npm ci'
+                        sh 'npm run build'
+                    }
                 }
             }
         }
@@ -63,10 +66,13 @@ pipeline {
                 expression { params.RUN_FULL_REGRESSION }
             }
             steps {
-                echo "Executing readiness probe for ${params.TARGET_ENV}..."
-                dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                    sh 'npm ci'
-                    sh "ENVIRONMENT=${env.ENVIRONMENT} node scripts/wait-for-deployment.js"
+                echo "Checking service readiness..."
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                        sh 'npm ci'
+                        sh 'node --version'
+                        sh 'ENVIRONMENT=$ENVIRONMENT node scripts/wait-for-deployment.js'
+                    }
                 }
             }
         }
@@ -76,10 +82,12 @@ pipeline {
                 expression { params.RUN_FULL_REGRESSION }
             }
             steps {
-                echo "Running smoke tests and API discovery for ${params.TARGET_ENV}..."
-                dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                    sh "ENVIRONMENT=${env.ENVIRONMENT} ./node_modules/.bin/playwright test"
-                    sh 'node scripts/calculate-score.js'
+                echo "Running Playwright verification..."
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                        sh 'ENVIRONMENT=$ENVIRONMENT ./node_modules/.bin/playwright test'
+                        sh 'node scripts/calculate-score.js'
+                    }
                 }
             }
         }
@@ -99,36 +107,19 @@ pipeline {
                 allowEmptyArchive: true
             )
 
-            // Publish HTML only after installing the HTML Publisher plugin.
-            script {
-                def htmlPublisherAvailable =
-                    Jenkins.instance.pluginManager.getPlugin('htmlpublisher') != null
-
-                if (htmlPublisherAvailable) {
-                    publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/html',
-                        reportFiles: 'index.html',
-                        reportName: "${params.TARGET_ENV} Post-Release Verification Report"
-                    ])
-                } else {
-                    echo 'HTML Publisher plugin is not installed; skipping HTML report publishing.'
-                }
-            }
-
             dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
+                }
             }
         }
 
         success {
-            echo "Quality Gate PASSED for ${params.TARGET_ENV}."
+            echo "Pipeline completed successfully for ${params.TARGET_ENV}."
         }
 
         failure {
-            echo "Quality Gate FAILED for ${params.TARGET_ENV}. Review Console Output."
+            echo "Pipeline FAILED for ${params.TARGET_ENV}. Review Console Output."
         }
     }
 }
