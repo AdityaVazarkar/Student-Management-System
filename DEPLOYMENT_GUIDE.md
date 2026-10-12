@@ -70,7 +70,7 @@ flowchart TD
 | **Backend API** | Java 21, Spring Boot 4.x, Hibernate | `8080` | `StudentRegistration/target/StudentRegistration-0.0.1-SNAPSHOT.jar` |
 | **Frontend UI** | React 19, Vite 8, Lucide React | `3000` | `Frontend/dist/` (Served via `vite preview`) |
 | **Post-Release Checks** | Playwright, Node.js | N/A | `SMART-STUDENT-POST-RELEASE-CHECKS/` |
-| **CI/CD** | Jenkins Declarative Pipeline | `8080` / custom | `Jenkinsfile` |
+| **CI/CD** | Jenkins Declarative Pipeline | `8081` / custom | `Jenkinsfile` |
 
 ---
 
