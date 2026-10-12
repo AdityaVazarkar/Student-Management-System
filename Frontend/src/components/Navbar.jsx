@@ -30,7 +30,13 @@ export default function Navbar({
           <GraduationCap size={24} />
         </div>
         <div className="brand-text">
-          <h1>EduManage</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h1>EduManage</h1>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6', fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.05em' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6' }}></span>
+              v2.0 Live
+            </span>
+          </div>
           <span>{isAdmin ? 'Teacher Admin Console' : 'Student Academic Portal'}</span>
         </div>
       </div>

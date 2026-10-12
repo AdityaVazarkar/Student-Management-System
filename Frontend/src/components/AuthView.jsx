@@ -71,6 +71,10 @@ export default function AuthView({ onAuthSuccess, classes = [] }) {
           <div className="auth-brand-icon">
             <GraduationCap size={32} />
           </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '9999px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#10b981', fontSize: '0.75rem', fontWeight: '600', marginBottom: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 8px #10b981' }}></span>
+            CI/CD Verified • Vercel Live
+          </div>
           <h2>EduManage Portal</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
             {isLogin ? 'Sign in to access your academic dashboard' : 'Create your student account to submit homework'}

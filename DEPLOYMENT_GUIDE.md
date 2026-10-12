@@ -492,4 +492,14 @@ triggers {
    - The frontend is automatically deployed to Vercel production (`--prod`).
    - The live production URL is updated and displayed in the Jenkins console!
 
+---
+
+## 13. Live Production Server Deployment
+
+| Environment | Status | Live URL |
+|---|---|---|
+| **Production (Vercel)** | 🟢 Active | [https://student-management-system-indol-eta.vercel.app](https://student-management-system-indol-eta.vercel.app) |
+| **Preview Alias** | 🟢 Active | [https://student-management-system-7rupwelp5-adityas-projects-f3763e7f.vercel.app](https://student-management-system-7rupwelp5-adityas-projects-f3763e7f.vercel.app) |
+
+
 
