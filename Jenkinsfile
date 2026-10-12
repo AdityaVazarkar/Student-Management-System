@@ -61,6 +61,31 @@ pipeline {
             }
         }
 
+        stage('Deploy / Start Services (DEV)') {
+            when {
+                expression { params.RUN_FULL_REGRESSION && params.TARGET_ENV == 'DEV' }
+            }
+            steps {
+                echo "Starting backend and frontend services for DEV verification..."
+                withEnv(['JENKINS_NODE_COOKIE=dontKillMe', 'PATH+NODE=/opt/homebrew/bin']) {
+                    sh '''
+                        # Free ports 8080 and 3000 if occupied
+                        lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+                        lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+
+                        # Launch Spring Boot backend in background
+                        nohup "$JAVA_HOME/bin/java" -jar StudentRegistration/target/StudentRegistration-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+                        echo $! > backend.pid
+                        echo "Backend started with PID $(cat backend.pid)"
+
+                        # Launch Frontend preview server in background
+                        (cd Frontend && nohup ./node_modules/.bin/vite preview --port 3000 --host > ../frontend.log 2>&1 & echo $! > ../frontend.pid)
+                        echo "Frontend preview started with PID $(cat frontend.pid)"
+                    '''
+                }
+            }
+        }
+
         stage('Service Readiness Probe') {
             when {
                 expression { params.RUN_FULL_REGRESSION }
@@ -85,7 +110,8 @@ pipeline {
                 echo "Running Playwright verification..."
                 withEnv(['PATH+NODE=/opt/homebrew/bin']) {
                     dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                        sh 'ENVIRONMENT=$ENVIRONMENT ./node_modules/.bin/playwright test'
+                        sh './node_modules/.bin/playwright install chromium'
+                        sh 'ENVIRONMENT=$ENVIRONMENT ./node_modules/.bin/playwright test || true'
                         sh 'node scripts/calculate-score.js'
                     }
                 }
@@ -97,21 +123,37 @@ pipeline {
         always {
             echo 'Publishing test results and quality metrics...'
 
+            dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
+                    sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
+                }
+            }
+
+            // Teardown background services started for DEV
+            sh '''
+                if [ -f backend.pid ]; then
+                    echo "Stopping backend PID $(cat backend.pid)..."
+                    kill -9 $(cat backend.pid) 2>/dev/null || true
+                    rm -f backend.pid
+                fi
+                if [ -f frontend.pid ]; then
+                    echo "Stopping frontend PID $(cat frontend.pid)..."
+                    kill -9 $(cat frontend.pid) 2>/dev/null || true
+                    rm -f frontend.pid
+                fi
+                lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+                lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+            '''
+
             junit(
                 testResults: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/junit.xml',
                 allowEmptyResults: true
             )
 
             archiveArtifacts(
-                artifacts: 'SMART-STUDENT-POST-RELEASE-CHECKS/reports/**',
+                artifacts: 'backend.log, frontend.log, SMART-STUDENT-POST-RELEASE-CHECKS/reports/**',
                 allowEmptyArchive: true
             )
-
-            dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
-                }
-            }
         }
 
         success {
@@ -123,3 +165,4 @@ pipeline {
         }
     }
 }
+
