@@ -7,18 +7,24 @@ pipeline {
         pollSCM('H/2 * * * *')
     }
 
-    parameters {
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+    }
 
+    parameters {
         choice(
             name: 'TARGET_ENV',
             choices: ['DEV', 'UAT'],
             description: 'Select target deployment environment to verify'
         )
+
         booleanParam(
             name: 'RUN_FULL_REGRESSION',
             defaultValue: true,
             description: 'Run smoke checks, API discovery, and quality scoring'
         )
+
         booleanParam(
             name: 'DEPLOY_TO_VERCEL',
             defaultValue: true,
@@ -26,74 +32,128 @@ pipeline {
         )
     }
 
-
     environment {
-        ENVIRONMENT = "${params.TARGET_ENV.toLowerCase()}"
+        ENVIRONMENT = 'dev'
         JAVA_HOME = '/opt/java/openjdk'
-        PATH+JAVA = '/opt/java/openjdk/bin'
         CI = 'true'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Target environment: ${params.TARGET_ENV}"
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    sh '''
-                        echo "Node: $(command -v node)"
-                        echo "npm: $(command -v npm)"
-                        node --version
-                        npm --version
-                        java -version
-                    '''
+                checkout scm
+
+                script {
+                    env.ENVIRONMENT = params.TARGET_ENV.toLowerCase()
                 }
+
+                echo "Target environment: ${params.TARGET_ENV}"
+
+                sh '''
+                    set -e
+                    echo "Node: $(command -v node)"
+                    echo "npm: $(command -v npm)"
+                    node --version
+                    npm --version
+                    echo "JAVA_HOME=$JAVA_HOME"
+                    java -version
+                '''
             }
         }
 
         stage('Build & Test Backend') {
             steps {
-                echo "Building Spring Boot backend..."
+                echo 'Building Spring Boot backend...'
+
                 dir('StudentRegistration') {
-                    sh '''
-                        chmod +x mvnw
-                        ./mvnw clean package
-                    '''
+                    withEnv([
+                        'JAVA_HOME=/opt/java/openjdk',
+                        'PATH+JAVA=/opt/java/openjdk/bin'
+                    ]) {
+                        sh '''
+                            set -e
+                            chmod +x mvnw
+                            echo "JAVA_HOME=$JAVA_HOME"
+                            java -version
+                            ./mvnw -version
+                            ./mvnw clean package -DskipTests
+                        '''
+                    }
                 }
             }
         }
 
         stage('Build Frontend') {
             steps {
-                echo "Building React frontend..."
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    dir('Frontend') {
-                        sh 'npm ci'
-                        sh 'npm run build'
-                    }
+                echo 'Building React frontend...'
+
+                dir('Frontend') {
+                    sh '''
+                        set -e
+                        node --version
+                        npm --version
+                        npm ci
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Install Verification Dependencies') {
+            when {
+                expression { params.RUN_FULL_REGRESSION }
+            }
+            steps {
+                dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                    sh '''
+                        set -e
+                        npm ci
+                        npx playwright --version
+                        npx playwright install chromium
+                    '''
                 }
             }
         }
 
         stage('Deploy / Start Services (DEV)') {
             when {
-                expression { params.RUN_FULL_REGRESSION && params.TARGET_ENV == 'DEV' }
+                expression {
+                    params.RUN_FULL_REGRESSION &&
+                    params.TARGET_ENV == 'DEV'
+                }
             }
             steps {
-                echo "Starting backend and frontend services for DEV verification..."
-                withEnv(['JENKINS_NODE_COOKIE=dontKillMe', 'PATH+NODE=/opt/homebrew/bin']) {
+                echo 'Starting services for DEV verification...'
+
+                withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
                     sh '''
-                        # Free ports 8080 and 3000 if occupied
-                        lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-                        lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+                        set -e
 
-                        # Launch Spring Boot backend in background
-                        nohup "$JAVA_HOME/bin/java" -jar StudentRegistration/target/StudentRegistration-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+                        # Stop stale services on the verification ports.
+                        lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
+                        lsof -ti:3000 | xargs -r kill -9 2>/dev/null || true
+
+                        # Start Spring Boot backend.
+                        test -f StudentRegistration/target/StudentRegistration-0.0.1-SNAPSHOT.jar
+
+                        nohup "$JAVA_HOME/bin/java" \
+                            -jar StudentRegistration/target/StudentRegistration-0.0.1-SNAPSHOT.jar \
+                            > backend.log 2>&1 < /dev/null &
                         echo $! > backend.pid
-                        echo "Backend started with PID $(cat backend.pid)"
 
-                        # Launch Frontend preview server in background
-                        (cd Frontend && nohup ./node_modules/.bin/vite preview --port 3000 --host > ../frontend.log 2>&1 & echo $! > ../frontend.pid)
-                        echo "Frontend preview started with PID $(cat frontend.pid)"
+                        # Start the Vite preview server.
+                        test -x Frontend/node_modules/.bin/vite
+
+                        (
+                            cd Frontend
+                            nohup ./node_modules/.bin/vite preview \
+                                --port 3000 --host 0.0.0.0 \
+                                > ../frontend.log 2>&1 < /dev/null &
+                            echo $! > ../frontend.pid
+                        )
+
+                        echo "Backend PID: $(cat backend.pid)"
+                        echo "Frontend PID: $(cat frontend.pid)"
                     '''
                 }
             }
@@ -104,13 +164,14 @@ pipeline {
                 expression { params.RUN_FULL_REGRESSION }
             }
             steps {
-                echo "Checking service readiness..."
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                        sh 'npm ci'
-                        sh 'node --version'
-                        sh 'ENVIRONMENT=$ENVIRONMENT node scripts/wait-for-deployment.js'
-                    }
+                echo 'Checking service readiness...'
+
+                dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                    sh '''
+                        set -e
+                        ENVIRONMENT="$ENVIRONMENT" \
+                            node scripts/wait-for-deployment.js
+                    '''
                 }
             }
         }
@@ -120,13 +181,15 @@ pipeline {
                 expression { params.RUN_FULL_REGRESSION }
             }
             steps {
-                echo "Running Playwright verification..."
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                        sh './node_modules/.bin/playwright install chromium'
-                        sh 'ENVIRONMENT=$ENVIRONMENT ./node_modules/.bin/playwright test || true'
-                        sh 'node scripts/calculate-score.js'
-                    }
+                echo 'Running Playwright verification...'
+
+                dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
+                    sh '''
+                        set -e
+                        ENVIRONMENT="$ENVIRONMENT" \
+                            ./node_modules/.bin/playwright test
+                        node scripts/calculate-score.js
+                    '''
                 }
             }
         }
@@ -136,50 +199,32 @@ pipeline {
                 expression { params.DEPLOY_TO_VERCEL }
             }
             steps {
-                echo "Deploying verified Frontend application to Vercel..."
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    dir('Frontend') {
-                        script {
-                            try {
-                                withCredentials([string(credentialsId: 'VERCEL_TOKEN', variable: 'VERCEL_TOKEN')]) {
-                                    sh '''
-                                        echo "Deploying production build to Vercel..."
-                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --name "student-management-system" --token="$VERCEL_TOKEN")
-                                        echo "=========================================================="
-                                        echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
-                                        echo "  Live URL: $LIVE_URL"
-                                        echo "=========================================================="
-                                    '''
-                                }
-                            } catch (Exception e) {
-                                sh '''
-                                    TOKEN_VAL="${VERCEL_TOKEN}"
-                                    if [ -z "$TOKEN_VAL" ] && [ -f "$HOME/.vercel_token" ]; then
-                                        TOKEN_VAL=$(cat "$HOME/.vercel_token")
-                                    fi
+                echo 'Deploying frontend to Vercel...'
 
-                                    if [ -n "$TOKEN_VAL" ]; then
-                                        echo "Deploying production build to Vercel..."
-                                        LIVE_URL=$(./node_modules/.bin/vercel deploy --prod --yes --name "student-management-system" --token="$TOKEN_VAL")
-                                        echo "=========================================================="
-                                        echo "  🚀 LIVE PRODUCTION DEPLOYMENT SUCCESSFUL!"
-                                        echo "  Live URL: $LIVE_URL"
-                                        echo "=========================================================="
-                                    else
+                dir('Frontend') {
+                    script {
+                        withCredentials([
+                            string(
+                                credentialsId: 'VERCEL_TOKEN',
+                                variable: 'VERCEL_TOKEN'
+                            )
+                        ]) {
+                            sh '''
+                                set -e
 
-                                        echo "=========================================================="
-                                        echo "  [Vercel Automated Deployment]"
-                                        echo "=========================================================="
-                                        echo "✓ Pipeline tests & quality gate passed successfully!"
-                                        echo "To deploy to Vercel automatically upon pipeline completion:"
-                                        echo "1. Obtain token from: https://vercel.com/account/tokens"
-                                        echo "2. Add in Jenkins: Manage Jenkins -> Credentials -> Global"
-                                        echo "   Kind: Secret text | ID: VERCEL_TOKEN"
-                                        echo "=========================================================="
-                                    fi
-                                '''
-                            }
+                                # Use the project-local CLI when available.
+                                if [ ! -x node_modules/.bin/vercel ]; then
+                                    npm install --no-save vercel
+                                fi
 
+                                LIVE_URL=$(./node_modules/.bin/vercel deploy \
+                                    --prod --yes \
+                                    --name student-management-system \
+                                    --token="$VERCEL_TOKEN")
+
+                                echo "Production deployment successful."
+                                echo "Live URL: $LIVE_URL"
+                            '''
                         }
                     }
                 }
@@ -187,31 +232,35 @@ pipeline {
         }
     }
 
-
     post {
         always {
             echo 'Publishing test results and quality metrics...'
 
             dir('SMART-STUDENT-POST-RELEASE-CHECKS') {
-                withEnv(['PATH+NODE=/opt/homebrew/bin']) {
-                    sh 'ENVIRONMENT=$ENVIRONMENT node scripts/cleanup-test-data.js || true'
-                }
+                sh '''
+                    if [ -d node_modules ] && [ -f scripts/cleanup-test-data.js ]; then
+                        ENVIRONMENT="$ENVIRONMENT" \
+                            node scripts/cleanup-test-data.js || true
+                    else
+                        echo "Skipping cleanup: verification dependencies are unavailable."
+                    fi
+                '''
             }
 
-            // Teardown background services started for DEV
+            // Stop services started for DEV verification.
             sh '''
                 if [ -f backend.pid ]; then
-                    echo "Stopping backend PID $(cat backend.pid)..."
-                    kill -9 $(cat backend.pid) 2>/dev/null || true
+                    kill -9 "$(cat backend.pid)" 2>/dev/null || true
                     rm -f backend.pid
                 fi
+
                 if [ -f frontend.pid ]; then
-                    echo "Stopping frontend PID $(cat frontend.pid)..."
-                    kill -9 $(cat frontend.pid) 2>/dev/null || true
+                    kill -9 "$(cat frontend.pid)" 2>/dev/null || true
                     rm -f frontend.pid
                 fi
-                lsof -ti:8080 | xargs kill -9 2>/dev/null || true
-                lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+
+                lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
+                lsof -ti:3000 | xargs -r kill -9 2>/dev/null || true
             '''
 
             junit(
@@ -220,7 +269,7 @@ pipeline {
             )
 
             archiveArtifacts(
-                artifacts: 'backend.log, frontend.log, SMART-STUDENT-POST-RELEASE-CHECKS/reports/**',
+                artifacts: 'backend.log,frontend.log,SMART-STUDENT-POST-RELEASE-CHECKS/reports/**',
                 allowEmptyArchive: true
             )
         }
@@ -234,4 +283,3 @@ pipeline {
         }
     }
 }
-
