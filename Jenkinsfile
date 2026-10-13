@@ -29,7 +29,8 @@ pipeline {
 
     environment {
         ENVIRONMENT = "${params.TARGET_ENV.toLowerCase()}"
-        JAVA_HOME = '/opt/homebrew/Cellar/openjdk@21/21.0.12/libexec/openjdk.jdk/Contents/Home'
+        JAVA_HOME = '/opt/java/openjdk'
+        PATH+JAVA = '/opt/java/openjdk/bin'
         CI = 'true'
     }
 
